@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+
+
 import {
     OrbitControls
 } from 'three/examples/jsm/controls/OrbitControls';
@@ -11,7 +13,9 @@ import {
 //     OrbitControls,GLTFL
 // } from 'three/examples/jsm';
 import Stats from 'three/examples/jsm/libs/stats.module';
-import { GUI } from 'dat.gui'
+import {
+    GUI
+} from 'dat.gui'
 
 
 
@@ -121,7 +125,17 @@ export default class Experience {
             vertexShader: null,
             fragmentShader: null,
             data: null,
-            time:0,
+            time: 0,
+            startPosition: null,
+            endPosition: null,
+            startFrustumSize: null,
+            endFrustumSize: null,
+            startTarget: null,
+            endTarget: null,
+            planeContainer: null,
+            shrinkStartTime: null,
+            isShrinking: false,
+            shrinkProgress: 0,
         };
 
         // Defining accessors
@@ -148,7 +162,7 @@ export default class Experience {
     render() {
         this.setDynamicContainer();
         this.drawCanvasAndWrapper();
-         this.setupScene()
+        this.setupScene()
         this.setupScene2()
         this.setupGui()
         this.setupTextures();
@@ -157,6 +171,7 @@ export default class Experience {
         this.setupControls()
         this.setupLights()
         this.setupRenderer();
+        this.controlColor()
         this.tick();
 
         return this;
@@ -164,13 +179,17 @@ export default class Experience {
 
     setupScene() {
         const scene = new THREE.Scene()
-      
-        this.setState({ scene })
-     
+
+        this.setState({
+            scene
+        })
+
     }
 
     setupGui() {
-        const {fboMaterial} = this.getState()
+        const {
+            fboMaterial
+        } = this.getState()
         const settings = {
             progress: 0
         }
@@ -180,113 +199,137 @@ export default class Experience {
         const gui = new GUI();
         gui.add(settings, "progress", 0, 1, 0.01).onChange((val) => {
             fboMaterial.uniforms.uProgress.value = val
+
+            console.log(val)
         });
 
-        this.setState({gui})
-        this.setState({settings})
+        this.setState({
+            gui
+        })
+        this.setState({
+            settings
+        })
+
 
     }
-
-
 
     setupTextures() {
 
         const loader = new THREE.TextureLoader()
         const ao = loader.load('./texture-ambient-occlusion.png')
         const fbo = loader.load('./ppic.png')
-        const state2 = loader.load('./image.png')
-    
+        const state2 = loader.load('./Xlogo3.png')
+
         ao.flipY = false
-        this.setState({ao})
-        this.setState({fbo})
-        this.setState({state2})
+        this.setState({
+            ao
+        })
+        this.setState({
+            fbo
+        })
+        this.setState({
+            state2
+        })
 
 
-      
-    }  
-     setupScene2() {
-        const {width,height,vertexShader,fragmentShader, fbo , state2} = this.getState()
-        const fboo = new THREE.WebGLRenderTarget(width,height)
-        const fboCamera = new THREE.OrthographicCamera(-1,1,1,-1,-1,1)
+
+    }
+    setupScene2() {
+        const {
+            width,
+            height,
+            vertexShader,
+            fragmentShader,
+            fbo,
+            state2
+        } = this.getState()
+        const fboo = new THREE.WebGLRenderTarget(width, height)
+        const fboCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1)
         const scene2 = new THREE.Scene()
         const fboMaterial = new THREE.ShaderMaterial({
             uniforms: {
-                uProgress: {value:0},
-                uState1: {value: new THREE.TextureLoader().load('./ppic.png')},
-                uState2: {value: new THREE.TextureLoader().load('./image.png')},
-                uFBO: {value: null}
+                uProgress: {
+                    value: 0
+                },
+                uState1: {
+                    value: new THREE.TextureLoader().load('./ppic.png')
+                },
+                uState2: {
+                    value: new THREE.TextureLoader().load('./Xlogo3.png')
+                },
+                uFBO: {
+                    value: null
+                }
             },
-            vertexShader:vertexShader,
-            fragmentShader:fragmentShader
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader
         })
 
-       
-        const fboGeo = new THREE.PlaneGeometry(2,2)
-        const fboQuad = new THREE.Mesh(fboGeo,fboMaterial)
-      
+
+        const fboGeo = new THREE.PlaneGeometry(2, 2)
+        const fboQuad = new THREE.Mesh(fboGeo, fboMaterial);
+
         scene2.add(fboQuad)
         scene2.add(fboCamera)
 
         console.log(scene2)
 
-        this.setState({scene2})
-        this.setState({fboCamera})
-        this.setState({fboo})
-        this.setState({fboMaterial})
+        this.setState({
+            scene2
+        })
+        this.setState({
+            fboCamera
+        })
+        this.setState({
+            fboo
+        })
+        this.setState({
+            fboMaterial
+        })
 
     }
     setupGeometryMaterialMesh() {
-        const { scene, ao, fbo} = this.getState();
+        const {
+            scene,
+            ao,
+            fbo
+        } = this.getState();
 
-   
-        // const material = new THREE.ShaderMaterial({
-        //     // extensions: {
-        //     //     derivatives: "#extension GL_OES_standard_derivatives : enable"
-        //     // },
-        //     side: THREE.DoubleSide,
-        //     uniforms: {
-        //         uTime: { value: 0 },
-        //         uResolution: { value: new THREE.Vector4() }
-        //     },
-        //     vertexShader,
-        //     fragmentShader
-        // })
-   
-             
+        // Create a container for the plane to handle rotations
+        const planeContainer = new THREE.Object3D();
+        scene.add(planeContainer);
 
         const material = new THREE.MeshPhysicalMaterial({
             roughness: 0.65,
             map: ao,
             aoMap: ao,
-            aoMapIntensity: 0.75 
-           
+            aoMapIntensity: 0.75
+            // 0.1
+
         })
 
         const uniforms = {
-            time: {value: 0},
-            uFbo: {value: null}, //fbo
-            aoMap: {value: ao},
-            light_color: {value: new THREE.Color('#ffe9e9')},
-            ramp_color_one: { value: new THREE.Color('#280A0A') },  // Very dark burgundy
-            ramp_color_two: { value: new THREE.Color('#520F0F') },  // Dark maroon
-            ramp_color_three: { value: new THREE.Color('#781414') },  // Deep crimson
-            ramp_color_four: { value: new THREE.Color('#991B1B') }   // Dark cherry red
-            
-            
-            // ramp_color_one: {value: new THREE.Color('#06082D')},
-            // ramp_color_two: {value: new THREE.Color('#020284')},
-            // ramp_color_three: {value: new THREE.Color('#0000ff')},
-            // ramp_color_four: {value: new THREE.Color('#71c7f5')}
+            time: { value: 0 },
+            uFbo: { value: null }, //fbo
+            aoMap: { value: ao },
+            light_color: { value: new THREE.Color('black') },
+            // ffe9e9ff
+            // New color ramp from dark purple to white
+            ramp_color_one: {value: new THREE.Color('#06082D')},
+            ramp_color_two: {value: new THREE.Color('#020284')},
+            ramp_color_three: {value: new THREE.Color('#0000ff')},
+            ramp_color_four: {value: new THREE.Color('white')}
         }
 
-        this.setState({uniforms})
+        this.setState({
+            uniforms
+        })
 
-            material.onBeforeCompile = (shader) => {
-            
-            shader.uniforms = Object.assign(shader.uniforms,uniforms)
-   
+        material.onBeforeCompile = (shader) => {
+            shader.uniforms = Object.assign(shader.uniforms, uniforms)
+
             shader.vertexShader = shader.vertexShader.replace(
-               '#include <common>',
+                '#include <common>',
                 `
                 #include <common>
                 uniform sampler2D uFbo;
@@ -303,22 +346,22 @@ export default class Experience {
 
             shader.vertexShader = shader.vertexShader.replace(
                 '#include <begin_vertex>',
-                
                 `
-              
                 #include <begin_vertex>
 
-                float n = cnoise(vec3(instanceUV.x * 6.,instanceUV.y*6.,time*0.1));
-                 
-                transformed.y += n*80.;
+                float n = cnoise(vec3(instanceUV.x * 6.,instanceUV.y*6.,time*0.15));
+                
+                transformed.y += n*220.;
+
+
                 float posy = position.y *2.0;
-                vHeightUV = clamp(posy ,0.,1.0);
+                
+                vHeightUV = clamp(posy ,2.,1.0);
                 vec4 transition = texture2D(uFbo, instanceUV);
                 transformed *= (transition.g);
-                transformed.y += transition.r*100.;
-                vHeight = transformed.y;
-
-                ` )
+                transformed.y += transition.r*150.;
+                vHeight = transformed.y ;
+                `)
 
             shader.fragmentShader = shader.fragmentShader.replace(
                 '#include <common>',
@@ -346,124 +389,273 @@ export default class Experience {
 
                 `
             )
-            
+
 
         }
 
 
         new GLTFLoader().load('./data/bar.glb', gltf => {
-          
+
             const model = gltf.scene.children[0];
-    
+
             this.material = material;
 
 
-
             this.geometry = model.geometry
-            this.geometry.scale(40,40,40)
+            this.geometry.scale(40, 40, 40)
 
-            const iSize = 50;
-            const instances = iSize**2;
-            const instanceMesh = new THREE.InstancedMesh(this.geometry,this.material,instances)
+            const iSize = 80;
+            const instances = iSize ** 2;
+            const instanceMesh = new THREE.InstancedMesh(this.geometry, this.material, instances)
             let dummy = new THREE.Object3D()
             let width = 60;
-            let instanceUV = new Float32Array(instances *2)
-            for(let i = 0 ; i < iSize ; i++) {
-                for(let j = 0 ; j < iSize ; j++) {
-                 
+            let instanceUV = new Float32Array(instances * 2)
+            for (let i = 0; i < iSize; i++) {
+                for (let j = 0; j < iSize; j++) {
+
                     instanceUV.set([i / iSize, j / iSize], (i * iSize + j) * 2)
                     dummy.position.set(
-                       width * ( i - iSize / 2),
+                        width * (i - iSize / 2),
                         0,
-                       width * (j - iSize / 2)
+                        width * (j - iSize / 2)
                     )
                     dummy.updateMatrix()
-                    instanceMesh.setMatrixAt(i * iSize + j,dummy.matrix)
+                    instanceMesh.setMatrixAt(i * iSize + j, dummy.matrix)
                 }
             }
 
-            this.geometry.setAttribute('instanceUV', new THREE.InstancedBufferAttribute(instanceUV,2))
-  
-            scene.add(instanceMesh);
+            this.geometry.setAttribute('instanceUV', new THREE.InstancedBufferAttribute(instanceUV, 2))
+
+            // Add instanceMesh to the container instead of scene
+            planeContainer.add(instanceMesh);
         })
 
 
         // this.setState({  material })
+        this.setState({ planeContainer });
     }
     setupControls() {
-        const { scene, width, height, canvas, camera } = this.getState();
-        const controls = new OrbitControls(camera, canvas)
-        controls.enableDamping = true
-        this.setState({ controls });
+        const {
+            scene,
+            width,
+            height,
+            canvas,
+            camera
+        } = this.getState();
+        const controls = new OrbitControls(camera, canvas);
+        controls.enableDamping = true;
+        controls.enabled = true; // Enable orbit controls so the user can interact
+
+        this.setState({
+            controls
+        });
     }
     setupCamera() {
         const { scene, width, height } = this.getState();
         const frustumSize = height;
-         const aspect = window.innerWidth / window.innerHeight;
-         const camera = new THREE.OrthographicCamera( frustumSize * aspect / - 2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / - 2, -2000, 2000 );
-        camera.position.set(2,2,2)
-        scene.add(camera)
+        const aspect = window.innerWidth / window.innerHeight;
+        const camera = new THREE.OrthographicCamera(
+            frustumSize * aspect / -2,
+            frustumSize * aspect / 2,
+            frustumSize / 2,
+            frustumSize / -2,
+            -2000,
+            2000
+        );
+        
+        // Define start and end positions
+        const startPosition = new THREE.Vector3(2, 2, 2);
+        // Move camera to face the plane from the front
+        const endPosition = new THREE.Vector3(0, 2, 4);
+        
+        // Define start and end targets for camera to look at
+        const startTarget = new THREE.Vector3(0, 0, 0);
+        // Look slightly up at the plane
+        const endTarget = new THREE.Vector3(0, 1, 0);
+        
+        // Store initial frustum size for interpolation
+        const startFrustumSize = height;
+        const endFrustumSize = height * 5.5;
+        
+        camera.position.copy(startPosition);
+        camera.lookAt(startTarget);
+        scene.add(camera);
 
-        this.setState({ camera })
+        this.setState({
+            camera,
+            startPosition,
+            endPosition,
+            startTarget,
+            endTarget,
+            startFrustumSize,
+            endFrustumSize
+        });
+    }
 
+    controlColor() {
 
     }
+
     setupLights() {
+        const {
+            scene,
+            settings,
+            uniforms
+        } = this.getState()
 
-        const {scene } = this.getState()
-        const Light1 = new THREE.AmbientLight(0xffffff, 2)
+        const Light1 = new THREE.AmbientLight(0x191919, 20)
+        const spotLight = new THREE.SpotLight(0x191919, 10)
 
-        const spotLight = new THREE.SpotLight(0xffe9e9, 10)
-         spotLight.position.set(-80*3,200*3,-80*3)
+
+
+
+        spotLight.position.set(-80 * 3, 200 * 3, -80 * 3)
         const target = new THREE.Object3D()
         target.position.set(0, -80, 200)
-        spotLight.target =  target
+        spotLight.target = target
         spotLight.decay = 0.7
         spotLight.angle = 1
-        spotLight.penumbra= 1.5
+        spotLight.penumbra = 1.5
         spotLight.distance = 3000
         scene.add(Light1)
         scene.add(spotLight)
-        this.setState({Light1,spotLight})
+        this.setState({
+            Light1,
+            spotLight
+        })
     }
     setupRenderer() {
-        const { width, height, canvas, fbo, fboCamera, scene2 } = this.getState();
+        const {
+            width,
+            height,
+            canvas,
+            fbo,
+            fboCamera,
+            scene2
+        } = this.getState();
         const renderer = new THREE.WebGLRenderer({
             canvas: canvas,
             logarithmicDepthBuffer: true,
             antialias: true
-            
+
         })
         renderer.setClearColor('black');
         renderer.setSize(width, height)
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-     
-        this.setState({ renderer })
+
+        this.setState({
+            renderer
+        })
     }
 
 
 
     tick() {
-        const state = this.getState()
-        const { scene, time, renderer, camera, controls , width, height, fboCamera, scene2, fboo, uniforms, fbo} = state;
-        controls.update()
-        state.time+=0.05;
+        const state = this.getState();
+        const {
+            scene,
+            time,
+            renderer,
+            camera,
+            controls,
+            width,
+            height,
+            fboCamera,
+            scene2,
+            fboo,
+            uniforms,
+            fbo,
+            settings,
+            startPosition,
+            endPosition,
+            startTarget,
+            endTarget,
+            startFrustumSize,
+            endFrustumSize,
+            planeContainer,
+            shrinkStartTime,
+            isShrinking,
+            fboMaterial
+        } = state;
+        
+        const progress = settings.progress;
+        
+        // Check if we should start reset
+        if (progress === 1 && !shrinkStartTime) {
+            this.setState({ shrinkStartTime: time + 1 }); // 1 second delay
+        }
+        
+        // Reset progress after delay
+        if (shrinkStartTime && time >= shrinkStartTime) {
+            setTimeout(() => {
+                // // this.resetAnimation()
+                // gsap.to(planeContainer.scale, { duration: 0.3, x: 0, y: 0, z: 0, ease: "" });
+                gsap.to(fboMaterial.uniforms.uProgress, { duration: 3, value: 0, ease: "" });
 
+            }, 5000);
+
+            this.setState({ shrinkStartTime: null });
+        }
         
-     
+        // Calculate the progress
+        const easedProgress = progress === 1 ? 1 : 
+            Math.pow(Math.sin(progress * Math.PI / 2), 1.5);
         
-        renderer.setRenderTarget(fboo)
-        renderer.render(scene2,fboCamera)
-        window.requestAnimationFrame(this.tick.bind(this))     
+        // Keep camera at end position once we've reached it
+        if (progress === 1 || (shrinkStartTime && time >= shrinkStartTime)) {
+            camera.position.copy(endPosition);
+            camera.lookAt(endTarget);
+        } else {
+            // Normal camera movement during animation
+            const currentPosition = new THREE.Vector3();
+            currentPosition.lerpVectors(startPosition, endPosition, easedProgress);
+            
+            const arcHeight = Math.sin(easedProgress * Math.PI * 0.9) * 0.3;
+            currentPosition.y += arcHeight;
+            
+            camera.position.copy(currentPosition);
+            
+            const currentTarget = new THREE.Vector3();
+            currentTarget.lerpVectors(startTarget, endTarget, easedProgress);
+            camera.lookAt(currentTarget);
+        }
         
-        renderer.setRenderTarget(null)
-        uniforms.uFbo.value = fboo.texture //an fbo
-        uniforms.time.value =  time
+        // Rotate plane based on progress
+        if (planeContainer) {
+            const startRotation = new THREE.Euler(0, 0, 0);
+            const endRotation = new THREE.Euler(-Math.PI / 2, 0, 0);
+            
+            const currentRotationX = THREE.MathUtils.lerp(
+                startRotation.x,
+                endRotation.x,
+                easedProgress
+            );
+            
+            planeContainer.rotation.x = currentRotationX;
+        }
         
-        console.log(uniforms.time.value);
-        renderer.render(scene, camera)
+        // Update frustum size
+        const currentFrustumSize = THREE.MathUtils.lerp(startFrustumSize, endFrustumSize, easedProgress);
+        const aspect = width / height;
+        
+        camera.left = -currentFrustumSize * aspect / 2;
+        camera.right = currentFrustumSize * aspect / 2;
+        camera.top = currentFrustumSize / 2;
+        camera.bottom = -currentFrustumSize / 2;
+        camera.updateProjectionMatrix();
+        
+        state.time += 0.05;
+
+        renderer.setRenderTarget(fboo);
+        renderer.render(scene2, fboCamera);
+        window.requestAnimationFrame(this.tick.bind(this));
+
+        renderer.setRenderTarget(null);
+        uniforms.uFbo.value = fboo.texture;
+        uniforms.time.value = time;
+        renderer.render(scene, camera);
+
     }
-
 
     drawCanvasAndWrapper() {
         const {
@@ -484,7 +676,9 @@ export default class Experience {
             .attr("font-family", defaultFont)
             .node()
 
-        this.setState({ canvas });
+        this.setState({
+            canvas
+        });
     }
 
     initializeEnterExitUpdatePattern() {
@@ -532,13 +726,53 @@ export default class Experience {
             var containerRect = canvasContainer.node().getBoundingClientRect();
             if (containerRect.width > 0) attrs.width = containerRect.width;
 
-            const { width, height, renderer, camera } = attrs;
+            const {
+                width,
+                height,
+                renderer,
+                camera
+            } = attrs;
             camera.aspect = width / height;
             camera.updateProjectionMatrix();
             renderer.setSize(width, height);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         });
 
-        this.setState({ canvasContainer });
+        this.setState({
+            canvasContainer
+        });
+    }
+
+    resetAnimation() {
+        const state = this.getState();
+
+        // Reset the progress to 0.
+        state.settings.progress = 0;
+        
+        // Reset the shader uniform for progress.
+        if (state.fboMaterial) {
+            state.fboMaterial.uniforms.uProgress.value = 0;
+        }
+        
+        // Clear any delayed timers.
+        state.shrinkStartTime = null;
+        
+        // Reset the time counter.
+        state.time = 0;
+        
+        // Reset the plane's scale back to its original full size.
+        if (state.fboQuad) {
+            state.fboQuad.scale.set(1, 1, 1);
+        }
+        
+        // Do NOT reset or change the camera's current position.
+        // This ensures the camera remains exactly where it is when resetAnimation() is called.
+        console.log("Animation has been reset. Camera remains at:", state.camera.position);
+        
+        // Reset any other animated elements.
+        if (state.planeContainer) {
+            state.planeContainer.rotation.set(0, 0, 0);
+            state.planeContainer.scale.set(1, 1, 1);
+        }
     }
 }
